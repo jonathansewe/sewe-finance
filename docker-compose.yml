@@ -1,0 +1,36 @@
+# Local development: PostgreSQL + the API.
+#   docker compose up        → API on http://localhost:8000
+# The Expo web app runs outside Docker: cd app && npm run web
+services:
+  db:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: sewe
+      POSTGRES_PASSWORD: sewe  # local only; production uses Neon (SPEC 3)
+      POSTGRES_DB: sewe
+    ports:
+      - "5432:5432"
+    volumes:
+      - db-data:/var/lib/postgresql/data
+      # Creates the extra sewe_test database that pytest uses.
+      - ./api/scripts/create-test-db.sql:/docker-entrypoint-initdb.d/create-test-db.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U sewe -d sewe"]
+      interval: 2s
+      timeout: 3s
+      retries: 20
+
+  api:
+    build: ./api
+    image: sewe-finance-api:dev
+    environment:
+      DATABASE_URL: postgresql+psycopg://sewe:sewe@db:5432/sewe
+      ALLOWED_ORIGINS: http://localhost:8081
+    ports:
+      - "8000:8000"
+    depends_on:
+      db:
+        condition: service_healthy
+
+volumes:
+  db-data:

@@ -1,70 +1,57 @@
-# Expense Categorizer
+# SEWE Finance
 
+A personal-finance app that reads your bank statements, sorts every
+transaction with rules and AI, and answers questions about your money.
+Read-only: it never moves money.
 
-
-A Python script that reads a CSV of transactions and prints total spending per category, sorted highest to lowest, with a grand total.
-
-
-
-## How to run
-
-
-
-Put `transactions.csv` in the same folder, then run:
-
-
-
-`python categorize.py`
-
-
-
-Requires Python 3. No external packages.
-
-
-
-## Sample output
-
-
+**Status:** milestone M1 (skeleton) of 9. See [`docs/SPEC.md`](docs/SPEC.md) for
+the full plan and [`LEARN.md`](LEARN.md) for a plain-English tour of the code.
 
 ```
-
-$ python categorize.py
-
-Rent: $3000.00
-
-Food: $492.00
-
-Shopping: $300.00
-
-Entertainment: $25.00
-
-Transportation: $14.25
-
-Total: $3831.25
-
+Expo app (web, iOS, Android) ──HTTPS──▶ FastAPI ──▶ PostgreSQL
+finance.jonathansewe.com                 api.finance.jonathansewe.com
 ```
 
+| Folder | What's inside |
+|---|---|
+| `app/` | Expo (React Native) app in TypeScript |
+| `api/` | FastAPI backend in Python 3.12 |
+| `docs/` | Spec, decision log, open questions |
+| `exercises/` | One rewrite-it-yourself exercise per milestone |
+| `legacy/` | P1, the original expense-categorizer script |
 
+## Run it locally
 
+You need Docker, Node 22 and [uv](https://docs.astral.sh/uv/).
 
+API + database:
 
-## Notes
+```bash
+docker compose up --build
+```
 
+Check it: <http://localhost:8000/api/v1/health> should answer `{"status":"ok","database":"ok"}`.
 
+Web app (second terminal):
 
-The source CSV has inconsistent spacing after commas, so some category values arrive as " Food" instead of "Food". The script calls `.strip()` on each one, which removes the surrounding whitespace so both spellings count as the same category.
+```bash
+cd app && npm install && npm run web
+```
 
+Open <http://localhost:8081>.
 
+## Tests
 
-## Possible extensions
+API (needs the database from `docker compose up`):
 
+```bash
+cd api && uv sync && uv run pytest
+```
 
+App:
 
-\- SQLite storage and queries
+```bash
+cd app && npm test
+```
 
-\- A dashboard with charts
-
-\- Automatic category assignment from the merchant name
-
-
-
+CI runs both, plus lint and type checks, on every push (`.github/workflows/ci.yml`).

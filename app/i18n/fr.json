@@ -1,0 +1,44 @@
+{
+  "tabs": {
+    "accounts": "Comptes",
+    "reports": "Rapports",
+    "receipt": "Reçu",
+    "chat": "Chat IA",
+    "settings": "Réglages"
+  },
+  "titles": {
+    "accounts": "Comptes",
+    "reports": "Rapports",
+    "receipt": "Scanner un reçu",
+    "chat": "Chat IA",
+    "settings": "Réglages"
+  },
+  "theme": {
+    "toggle": "Passer au thème clair ou sombre",
+    "system": "Système",
+    "dark": "Sombre",
+    "light": "Clair"
+  },
+  "accounts": {
+    "totalBalance": "Solde total",
+    "emptyTitle": "Aucune donnée",
+    "emptyBody": "Importe un relevé bancaire pour voir où va ton argent.",
+    "importStatement": "Importer un relevé",
+    "connectBank": "Connecter une banque · bientôt"
+  },
+  "placeholder": {
+    "title": "Bientôt disponible",
+    "body": "Cet écran arrive à l’étape {{milestone}}."
+  },
+  "settings": {
+    "appearance": "APPARENCE",
+    "theme": "Thème",
+    "language": "Langue",
+    "version": "SEWE Finance · v{{version}}"
+  },
+  "languages": {
+    "en": "English",
+    "fr": "Français",
+    "es": "Español"
+  }
+}

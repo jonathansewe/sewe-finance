@@ -1,0 +1,1 @@
+CREATE DATABASE sewe_test;

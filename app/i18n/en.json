@@ -1,0 +1,44 @@
+{
+  "tabs": {
+    "accounts": "Accounts",
+    "reports": "Reports",
+    "receipt": "Receipt",
+    "chat": "AI Chat",
+    "settings": "Settings"
+  },
+  "titles": {
+    "accounts": "Accounts",
+    "reports": "Reports",
+    "receipt": "Scan a receipt",
+    "chat": "AI Chat",
+    "settings": "Settings"
+  },
+  "theme": {
+    "toggle": "Switch light or dark theme",
+    "system": "System",
+    "dark": "Dark",
+    "light": "Light"
+  },
+  "accounts": {
+    "totalBalance": "Total balance",
+    "emptyTitle": "No data yet",
+    "emptyBody": "Import a bank statement to see where your money goes.",
+    "importStatement": "Import a statement",
+    "connectBank": "Connect a bank · coming soon"
+  },
+  "placeholder": {
+    "title": "Coming soon",
+    "body": "This screen arrives in milestone {{milestone}}."
+  },
+  "settings": {
+    "appearance": "APPEARANCE",
+    "theme": "Theme",
+    "language": "Language",
+    "version": "SEWE Finance · v{{version}}"
+  },
+  "languages": {
+    "en": "English",
+    "fr": "Français",
+    "es": "Español"
+  }
+}
