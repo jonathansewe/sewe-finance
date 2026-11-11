@@ -52,7 +52,12 @@ def _migrated_database() -> None:
     from alembic import command
     from alembic.config import Config
 
+    from app.config import get_settings
+
     os.environ["DATABASE_URL"] = TEST_DATABASE_URL
+    # Importing app.main already cached settings with the default database,
+    # so clear the cache or Alembic would migrate the wrong one.
+    get_settings.cache_clear()
     command.upgrade(Config(str(API_DIR / "alembic.ini")), "head")
 
 
