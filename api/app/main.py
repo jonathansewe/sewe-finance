@@ -13,6 +13,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.config import get_settings
 from app.errors import install_error_handlers
 from app.routers import auth, health, sessions, two_factor
+from app.security.origin import OriginCheckMiddleware
 from app.security.rate_limit import RateLimiter
 
 API_PREFIX = "/api/v1"
@@ -23,8 +24,12 @@ def create_app() -> FastAPI:
     app = FastAPI(title="SEWE Finance API", version="0.2.0")
     install_error_handlers(app)
     app.state.limiter = RateLimiter()
-    # CORS decides which web pages may READ our responses. It is not access
-    # control: the Origin check (security/origin.py) decides what we ACCEPT.
+    # Middleware added last runs first. Order on the way in: CORS (answers
+    # preflights), then the Origin check, then the routes.
+    # The Origin check decides what the API ACCEPTS (D-16).
+    app.add_middleware(OriginCheckMiddleware, allowed_origins=settings.allowed_origin_list)
+    # CORS decides which web pages may READ our responses. Different job,
+    # so both stay.
     app.add_middleware(
         CORSMiddleware,
         allow_origins=settings.allowed_origin_list,  # exact origins, never "*"
