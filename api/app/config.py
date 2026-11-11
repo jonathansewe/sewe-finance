@@ -64,10 +64,15 @@ class Settings(BaseSettings):
             problems.append("JWT_SECRET must be a random value of at least 32 characters")
         if self.data_encryption_key == DEV_DATA_ENCRYPTION_KEY:
             problems.append("DATA_ENCRYPTION_KEY must not be the development key")
-        if self.forwarded_allow_ips.strip() in ("", "127.0.0.1"):
+        proxies = {ip.strip() for ip in self.forwarded_allow_ips.split(",") if ip.strip()}
+        if proxies <= {"127.0.0.1", "::1"}:
             # Behind Render's proxy every request would come from the proxy's
             # IP, so one shared per-IP rate limit would lock everyone out.
             problems.append("FORWARDED_ALLOW_IPS must name the hosting proxy, not 127.0.0.1")
+        elif "*" in proxies:
+            # "*" trusts every hop, so uvicorn would take the left-most
+            # X-Forwarded-For entry: the one the client writes itself.
+            problems.append("FORWARDED_ALLOW_IPS must not be *: clients could spoof their IP")
         if self.email_provider != "resend" or not self.resend_api_key:
             problems.append("EMAIL_PROVIDER must be resend, with RESEND_API_KEY set")
         if not self.cookie_secure:

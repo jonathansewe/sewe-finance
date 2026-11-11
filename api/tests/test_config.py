@@ -20,7 +20,7 @@ def test_safe_production_settings_load() -> None:
     assert Settings(**SAFE_PROD).app_env == "prod"  # type: ignore[arg-type]
 
 
-@pytest.mark.parametrize("value", ["127.0.0.1", "", "  "])
+@pytest.mark.parametrize("value", ["127.0.0.1", "127.0.0.1,::1", "", "  ", "*", "10.0.0.0/8,*"])
 def test_prod_refuses_default_forwarded_allow_ips(value: str) -> None:
     with pytest.raises(ValidationError, match="FORWARDED_ALLOW_IPS"):
         Settings(**{**SAFE_PROD, "forwarded_allow_ips": value})  # type: ignore[arg-type]

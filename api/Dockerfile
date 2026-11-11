@@ -19,4 +19,6 @@ USER sewe
 
 EXPOSE 8000
 # Apply migrations, then serve. Render runs the same command.
-CMD ["sh", "-c", "alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port 8000"]
+# --proxy-headers: take the client IP from X-Forwarded-For, but only when the
+# peer is listed in FORWARDED_ALLOW_IPS (uvicorn reads that env var). D-36.
+CMD ["sh", "-c", "alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port 8000 --proxy-headers"]
