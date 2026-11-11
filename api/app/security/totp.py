@@ -63,7 +63,8 @@ def matching_step(secret: str, code: str, at_time: int) -> int | None:
     found: int | None = None
     # Check every step in the window, even after a match, so timing doesn't
     # reveal which one matched.
-    for step in range(now_step - WINDOW, now_step + WINDOW + 1):
+    # max(0, ...): step -1 doesn't exist (and can't be packed as unsigned).
+    for step in range(max(0, now_step - WINDOW), now_step + WINDOW + 1):
         if constant_time_equal(hotp(key, step), code) and found is None:
             found = step
     return found
