@@ -133,13 +133,16 @@ def bearer(token: str) -> dict[str, str]:
 
 def enable_totp(client: TestClient, access_token: str) -> tuple[str, list[str]]:
     """Turn TOTP on for the signed-in user; returns (secret, recovery codes)."""
+    from app import clock
+
     r = client.post("/api/v1/auth/totp/setup", headers=bearer(access_token))
     assert r.status_code == 200, r.text
     secret: str = r.json()["secret"]
     r = client.post(
         "/api/v1/auth/totp/verify",
         headers=bearer(access_token),
-        json={"code": pyotp.TOTP(secret).now()},
+        # The app's clock, not the real one: some tests freeze time.
+        json={"code": pyotp.TOTP(secret).at(clock.utcnow())},
     )
     assert r.status_code == 200, r.text
     recovery: list[str] = r.json()["recovery_codes"]
