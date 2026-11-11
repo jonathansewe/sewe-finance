@@ -28,7 +28,9 @@ class ConsoleEmailSender:
     def send(self, to: str, subject: str, text: str, html: str | None = None) -> None:
         # The one deliberate exception to "never log codes": this sender
         # exists so a developer can read the code. Production uses Resend.
-        print(f"\n--- email to {to} ---\nSubject: {subject}\n\n{text}\n--- end email ---\n")
+        # flush=True: a container buffers stdout; the code must appear at once.
+        message = f"\n--- email to {to} ---\nSubject: {subject}\n\n{text}\n--- end email ---\n"
+        print(message, flush=True)
 
 
 class ResendEmailSender:

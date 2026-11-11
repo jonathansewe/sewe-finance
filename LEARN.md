@@ -55,3 +55,51 @@ handles money yet. M1 is the frame the next eight milestones fill in.
 `{"tabs": {"accounts": "Konten"}}`, add `'de'` to `LANGUAGES` and `resources`
 in `i18n/index.ts`, and run `npm test`. The parity test fails and lists
 every missing key; fill them in until it passes.
+
+---
+
+## M2 · Auth and security
+
+**What we built.** Accounts: sign up with an emailed code, sign in with a
+password plus an authenticator-app code (or a passkey on the web), stay
+signed in with a rotating refresh token, and sign out everywhere it
+matters. The API refuses requests from other websites (the Origin check),
+counts attempts (rate limits), and never stores a secret in plain text.
+
+**Files**
+
+| File | What it does |
+|---|---|
+| `api/app/routers/auth.py` | Signup, verify-email, login, refresh, logout. |
+| `api/app/routers/two_factor.py` | TOTP setup and verify, recovery codes. |
+| `api/app/routers/passkeys.py` | Web passkey register and sign-in (py_webauthn). |
+| `api/app/routers/sessions.py`, `settings.py`, `me.py` | Active sessions + revoke; theme/language; "who am I". |
+| `api/app/security/sessions.py` | Starts sessions; refresh rotation, 20 s grace, reuse detection. |
+| `api/app/security/tokens.py` | JWTs with a pinned algorithm and a `purpose`; refresh token format. |
+| `api/app/security/totp.py` | RFC 6238 one-time codes, standard library only (your exercise). |
+| `api/app/security/hashing.py`, `encryption.py` | Keyed hashes + constant-time compare; AES-GCM for the TOTP secret. |
+| `api/app/security/origin.py`, `cookies.py`, `rate_limit.py` | The Origin check, the one cookie, attempt limits. |
+| `api/app/security/deps.py` | `get_current_auth`: checks the token **and** that its session is still live. |
+| `api/app/services/email.py` | Console sender (local) or Resend (prod), one interface. |
+| `app/lib/api.ts`, `tokens.ts` | Typed API client with one shared refresh; where tokens live. |
+| `app/auth/AuthProvider.tsx` | Sign-in state for the whole app; syncs theme/language. |
+| `app/app/(auth)/`, `(onboarding)/` | Sign-in screens; TOTP setup and the passkey offer. |
+
+**New concepts**
+
+- **Refresh-token rotation:** each refresh swaps the token for a new one, so a stolen old token is worth nothing, and if it shows up again we know it was stolen and end the session (`rotate_refresh_token`).
+- **TOTP:** your phone and the server share a secret; every 30 s both compute HMAC(secret, time ÷ 30) and keep 6 digits. Matching digits prove you hold the secret without ever sending it (`security/totp.py`).
+- **Conditional UPDATE:** `UPDATE … WHERE last_step < :step` lets the database, not Python, decide which of two simultaneous requests wins (`_consume_totp_code`).
+
+**Commands**
+
+| Command | What it does |
+|---|---|
+| `docker compose logs api` | Shows the API log, where the console sender prints verification codes. |
+| `uv run pytest --cov=app/security --cov=app/services` | Tests plus coverage of the security code (CI needs ≥ 80%). |
+| `uv run alembic revision --autogenerate -m "..."` | Writes a migration from the model changes; always read it before committing. |
+| `uv run pytest ../exercises/M2` | Runs your `verify_totp` against the exercise tests. |
+
+**Try it.** In `api/app/config.py`, change `refresh_grace_seconds` to `0`
+and run `uv run pytest tests/test_refresh.py`. The grace test fails: a
+second tab refreshing a moment later would now log you out. Put it back.
