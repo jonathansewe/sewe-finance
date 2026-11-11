@@ -2,7 +2,10 @@
  * Root layout: wraps every screen in the app-wide providers.
  *
  * Loads the fonts (Inter, Space Grotesk), starts i18n, and provides the
- * theme. Expo Router renders the matching route inside <Slot />.
+ * theme and the auth state. Expo Router renders the matching route inside
+ * <Slot />; the group layouts ((auth), (onboarding), (tabs)) decide who may
+ * see which screen. AuthProvider sits inside ThemeProvider so it can sync
+ * the theme to the account.
  */
 
 import '@/i18n';
@@ -17,6 +20,7 @@ import { Slot } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
+import { AuthProvider } from '@/auth/AuthProvider';
 import { ThemeProvider, useTheme } from '@/theme/ThemeProvider';
 
 export { ErrorBoundary } from 'expo-router';
@@ -41,8 +45,10 @@ export default function RootLayout() {
   return (
     <SafeAreaProvider>
       <ThemeProvider>
-        <ThemedStatusBar />
-        <Slot />
+        <AuthProvider>
+          <ThemedStatusBar />
+          <Slot />
+        </AuthProvider>
       </ThemeProvider>
     </SafeAreaProvider>
   );
