@@ -12,7 +12,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import get_settings
 from app.errors import install_error_handlers
-from app.routers import auth, health, passkeys, sessions, two_factor
+from app.routers import auth, health, me, passkeys, sessions, two_factor
 from app.routers import settings as settings_router
 from app.security.origin import OriginCheckMiddleware
 from app.security.rate_limit import RateLimiter
@@ -38,7 +38,7 @@ def create_app() -> FastAPI:
         allow_methods=["GET", "POST", "PATCH", "PUT", "DELETE"],
         allow_headers=["Authorization", "Content-Type"],
     )
-    routers = (health, auth, two_factor, passkeys, sessions, settings_router)
+    routers = (health, auth, two_factor, passkeys, me, sessions, settings_router)
     for module in routers:
         app.include_router(module.router, prefix=API_PREFIX)
     return app

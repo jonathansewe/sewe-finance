@@ -76,3 +76,19 @@ def test_settings_reject_unknown_values(client: TestClient, outbox: Outbox) -> N
 
 def test_settings_need_sign_in(client: TestClient) -> None:
     assert client.get("/api/v1/settings").status_code == 401
+
+
+def test_me_reports_protection_status_and_no_secrets(client: TestClient, outbox: Outbox) -> None:
+    from tests.conftest import enable_totp
+
+    access = signup_and_verify(client, outbox, "jo@example.com")["access_token"]
+    me = client.get("/api/v1/me", headers=bearer(access)).json()
+    assert me == {
+        "email": "jo@example.com",
+        "display_name": None,
+        "totp_enabled": False,
+        "passkey_count": 0,
+    }
+    enable_totp(client, access)
+    assert client.get("/api/v1/me", headers=bearer(access)).json()["totp_enabled"] is True
+    assert client.get("/api/v1/me").status_code == 401
