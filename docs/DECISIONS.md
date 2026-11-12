@@ -790,3 +790,310 @@ Jonathan's call, and a license should be chosen on purpose rather than
 inherited from a template.
 
 **Rejected alternatives.** *Keep them:* conflicting instructions in the repo.
+
+---
+
+# M2 build decisions
+
+D-33 to D-43 were agreed with Jonathan before coding (2026-11-11). D-44 to
+D-54 are judgment calls made while building M2.
+
+## D-33 · No session links in commits or pull requests
+*2026-11-11 · M2*
+
+**Decision.** The first M2 commit adds `.claude/settings.json` with
+`{"attribution": {"sessionUrl": false}}`. Commits end with only the
+`Co-Authored-By` trailer; PR bodies with only the "Generated with Claude
+Code" line. No claude.ai session links anywhere.
+
+**Reason.** Jonathan's call: session links are private working history, and
+the repo is public. This file is unrelated to the scaffold's
+`app/.claude/settings.json` removed in D-32 (that one enabled a third-party
+plugin).
+
+**Rejected alternative.** *Rely on remembering:* a setting can't forget.
+
+## D-34 · Refresh rotation with a 20-second grace period
+*2026-11-11 · SPEC 6.2 item 5 · `security/sessions.py`*
+
+**Decision.** The next refresh secret is derived, not random:
+`next = HMAC(key, session_id ‖ current_secret)`. If the immediately previous
+secret is presented within 20 s of its rotation, the API answers with the
+**same** next refresh token (and a fresh access token) and revokes nothing.
+Rotation is a conditional `UPDATE … WHERE refresh_token_hash = :old`, so two
+simultaneous rotations can't fork the chain; the loser falls into the grace
+path.
+
+**Reason.** On the web the refresh cookie is shared by every tab. Two tabs
+reloading together both send the same cookie; serializing inside one tab's
+JavaScript can't stop that. Without grace, the second request looks like
+token reuse and logs the user out. Deriving the next secret means the server
+can hand out the same token again without ever storing a secret in plain
+text. 20 s covers slow networks; anything later is treated as reuse.
+
+**Rejected alternatives.**
+- *Revoke on any reuse (strict rotation):* random logouts with two tabs open.
+- *Store the next secret encrypted for 20 s:* more state, and a readable secret at rest.
+- *No rotation:* a stolen refresh token would work for 30 days.
+
+## D-35 · Reuse detection only for secrets we really issued
+*2026-11-11 · SPEC 6.2 item 5*
+
+**Decision.** Each rotation writes the old secret's hash to
+`refresh_token_history`. A presented secret that matches a history row
+(outside the grace window) revokes the session: 401 `refresh_reused`. A
+secret that matches nothing: 401 `refresh_invalid`, and the session lives on.
+
+**Reason.** Reuse of a real, rotated-out token means two parties hold it:
+one of them is a thief, so killing the session is right. A secret we never
+issued proves nothing except that someone knows a session id; revoking for
+that would let anyone log a user out.
+
+**Rejected alternative.** *Revoke on any mismatch (the first draft):* a cheap logout attack.
+
+## D-36 · Client IP only from a trusted proxy
+*2026-11-11 · SPEC 6.2 item 7 · `security/rate_limit.py`, `Dockerfile`, `config.py`*
+
+**Decision.** uvicorn runs with `--proxy-headers`; it trusts
+`X-Forwarded-For` only from peers in `FORWARDED_ALLOW_IPS` and then takes
+the right-most untrusted entry. The rate limiter reads only
+`request.client.host`, never the header. In production the API **refuses to
+start** if `FORWARDED_ALLOW_IPS` is still `127.0.0.1` (or uvicorn's
+`127.0.0.1,::1`, or empty), and also if it is `*`.
+
+**Reason.** Any client can write `X-Forwarded-For`, so reading it directly
+lets an attacker pick a new IP per request and dodge the per-IP limit.
+Behind Render's proxy with `127.0.0.1`, every request would come from the
+proxy's IP, and one shared per-IP limit would lock out all users together
+(Jonathan's addition). With `*`, every hop is trusted, so uvicorn would take
+the left-most entry: the one the client wrote.
+
+**Open for M9.** The right value on Render depends on how its proxy reaches
+the container and builds `X-Forwarded-For`; check Render's docs then. The
+per-account limit doesn't depend on the IP, so password guessing stays capped.
+
+**Rejected alternative.** *Warn instead of refusing to start:* a log line is easy to miss; a failed deploy isn't.
+
+## D-37 · Constant-time comparisons for every secret
+*2026-11-11 · `security/hashing.py`*
+
+**Decision.** `hmac.compare_digest` for TOTP codes, email-code hashes,
+recovery-code hashes and refresh-secret hashes. Recovery codes: load the
+user's unused hashes and compare against each, so a hash is never used as a
+SQL lookup key. TOTP checks all steps in the window even after a match.
+
+**Reason.** `==` stops at the first different byte, and response time can
+leak how much of a guess was right.
+
+## D-38 · Login doesn't reveal which emails have accounts
+*2026-11-11 · `routers/auth.py`*
+
+**Decision.** An unknown email still runs argon2 against a fixed dummy hash.
+`email_not_verified` is returned only after the password is verified; a
+wrong password on an unverified account gets `invalid_credentials`, like any
+other wrong password.
+
+**Reason.** Skipping argon2 for unknown emails makes them answer ~50 ms
+faster: a timing oracle for "does this person use SEWE?". Saying "not
+verified" before checking the password would be a direct oracle.
+
+## D-39 · JWT algorithm pinned, purposes kept apart
+*2026-11-11 · `security/tokens.py`*
+
+**Decision.** Decoding allows only HS256 and requires `exp`, `iat`, `sub`
+and `purpose` (plus `sid` for access tokens). `purpose` is `access` or
+`mfa`; each endpoint accepts exactly one.
+
+**Reason.** Trusting the token's own `alg` header allows `none` and
+algorithm-confusion attacks. Without `purpose`, the 5-minute MFA token
+(issued after only the password) would work as an access token and skip TOTP.
+
+## D-40 · Passkeys require user verification
+*2026-11-11 · `routers/passkeys.py`*
+
+**Decision.** `userVerification: "required"` in registration and
+authentication options, and `require_user_verification=True` in both
+verify calls. Registration also requires a discoverable credential, so
+sign-in needs no email first.
+
+**Reason.** A passkey sign-in replaces password + TOTP, so it must prove
+two factors: the device (something you have) unlocked by biometrics or PIN
+(something you are or know). Without UV, a stolen unlocked security key
+alone would be enough.
+
+## D-41 · Single-use by conditional UPDATE
+*2026-11-11*
+
+**Decision.** TOTP replay guard:
+`UPDATE users SET totp_last_used_step = :step WHERE id = :id AND
+(totp_last_used_step IS NULL OR totp_last_used_step < :step)`; 0 rows →
+reject. The same pattern consumes recovery codes (`WHERE used_at IS NULL`),
+counts email-code attempts (`WHERE attempts < 5`), uses passkey challenges
+and rotates refresh tokens.
+
+**Reason.** "Read, check, then write" lets two simultaneous requests both
+pass the check. A conditional UPDATE makes the database decide: only one
+can change the row. A test fires two requests with one TOTP code at once.
+
+## D-42 · Email codes stored as keyed hashes
+*2026-11-11 · `security/codes.py`, `security/hashing.py`*
+
+**Decision.** `code_hash = HMAC-SHA256(key, user_id ‖ code)`, with the key
+derived by HKDF from `DATA_ENCRYPTION_KEY` (one sub-key per purpose).
+
+**Reason.** There are only 1,000,000 six-digit codes, so a plain SHA-256
+from a leaked database is reversed in milliseconds. A keyed hash can't be
+brute-forced without the server key.
+
+**Rejected alternative.** *argon2 for codes:* slow on purpose, which a 10-minute code doesn't need once it's keyed.
+
+## D-43 · Refresh cookie attributes, tested on every flow
+*2026-11-11 · SPEC 6.1 · `security/cookies.py`, `tests/test_cookies.py`*
+
+**Decision.** `refresh_token`: `HttpOnly; Secure; SameSite=Strict;
+Path=/api/v1/auth/refresh`, never `Domain` (confirmed by Jonathan:
+`/api/v1/auth/refresh`, as SPEC 6.1 and D-18 say). The test checks every
+attribute on every Set-Cookie from verify-email, login, totp/verify,
+recovery/verify, passkey login, refresh (success and failure), logout and
+self-revoke.
+
+**SameSite check.** Production app and API share `jonathansewe.com`, so
+they are same-site and `Strict` works. Local `localhost:8081` ↔
+`localhost:8000` is same-site too. Vercel previews are cross-site but go
+through the `/api` rewrite (same origin). No problem found.
+
+## D-44 · Login with TOTP returns an MFA token first
+*2026-11-11 · SPEC 6.2, 8*
+
+**Decision.** Password OK and TOTP on → `{"mfa_required": true,
+"mfa_token": ...}` (5-minute JWT, `purpose=mfa`); `/auth/totp/verify` or
+`/auth/recovery/verify` with that token then starts the session. Without
+TOTP, the session starts at once, but `require_totp` blocks bank-data
+routes. `/auth/totp/verify` without `mfa_token` (and with a Bearer token)
+confirms setup instead. The app keeps the MFA token in memory, never in the
+URL.
+
+**Reason.** The spec's endpoint list has one `totp/verify`; these are its
+two natural jobs. No half-signed-in session row exists before the second
+factor.
+
+## D-45 · Repeat signups resend the code; answers never differ
+*2026-11-11 · `routers/auth.py`*
+
+**Decision.** `/signup` always answers 202 `verification_sent`. For a new or
+unverified email it (re)sends a code and replaces the password; for a
+verified email it does nothing. There is no separate "resend" endpoint.
+Codes per email are capped at 3 per hour (Resend's free tier is shared).
+
+**Reason.** Different answers would reveal registered emails. Replacing the
+password of an unverified account stops a stranger from pre-registering
+someone else's email: whoever reads the inbox decides. Known limit: an
+expired code answers `code_expired`, which shows a signup is pending.
+
+## D-46 · A verified email signs you in
+*2026-11-11*
+
+**Decision.** A correct `/verify-email` code starts a session, so the user
+goes straight to TOTP setup without typing the password again.
+
+**Reason.** The code proves inbox access, and the password was set seconds
+ago in the same flow.
+
+## D-47 · Schema and endpoints added beyond SPEC 5 and 8
+*2026-11-11*
+
+| Addition | Why |
+|---|---|
+| `users.totp_enabled_at` | TOTP is "on" only after a code confirms setup |
+| `users.totp_last_used_step` | Replay guard (D-41) |
+| `refresh_token_history` | Reuse detection (D-35) |
+| `sessions.rotated_at` | Grace window (D-34) |
+| `email_verification_codes` | 10-minute codes, 5 tries, hashed (D-42) |
+| `webauthn_challenges` | One-time passkey challenges |
+| `GET /me` | The app must know after a reload whether TOTP is on and a passkey exists |
+| `GET/PATCH /settings` (theme, language) | SPEC 9: saved to `user_settings` from M2 |
+
+## D-48 · Recovery codes: 10 × 60 bits, keyed hashes
+*2026-11-11 · `security/codes.py`*
+
+**Decision.** 12 characters from Crockford base32 (no i, l, o, u),
+shown as `xxxx-xxxx-xxxx`; input ignores case, spaces and dashes. Stored as
+HMAC-SHA256 bound to the user id. Regenerating needs a current TOTP code.
+
+**Reason.** 60 random bits plus rate limits make guessing hopeless, so a
+fast keyed hash is enough; argon2 × 10 per attempt would be slow for no
+gain. A TOTP code for regeneration means a stolen access token alone can't
+mint new codes.
+
+## D-49 · In-memory rate limiter
+*2026-11-11 · `security/rate_limit.py`*
+
+**Decision.** A sliding window in the API process: 5 per minute per IP and
+per account on login, verify-email, TOTP, recovery and passkey sign-in;
+429 `rate_limited` with `Retry-After`.
+
+**Reason.** One Render instance runs one process, so in-memory counters are
+correct and need no Redis. Known limit: they reset on restart and aren't
+shared between workers. Move them to Postgres or Redis before scaling out.
+
+## D-50 · Log events, never secrets or addresses
+*2026-11-11 · SPEC 6.3*
+
+**Decision.** Auth code logs event names only (`login.failed`,
+`refresh.failed`, `origin.rejected`...): no emails, codes, tokens or header
+values. Validation errors name the bad fields but never echo values. The
+one exception is the console email sender, which prints emails (and their
+codes) because that is its whole purpose in local development; production
+uses Resend.
+
+## D-51 · Browsers get the refresh token as a cookie, native apps in the body
+*2026-11-11 · SPEC 6.1 · `security/cookies.py`*
+
+**Decision.** The API decides by the `Origin` header: present (a browser)
+→ HttpOnly cookie, and the JSON body has `refresh_token: null`; absent (the
+native app) → the token is in the body, and no cookie is set.
+
+**Reason.** Browsers always send `Origin` on POST, and the native app never
+does; the Origin middleware (D-16) already relies on that split. Putting the
+refresh token in a browser-readable body would undo HttpOnly.
+
+**Spec reading.** SPEC 6.1 says a missing Origin is allowed only for
+requests that "authenticate with a Bearer header or a refresh token in the
+body". Native signup and login have neither yet, so the middleware checks
+only "no cookies", and each endpoint enforces its own authentication.
+
+## D-52 · `credentials: 'include'` on every /auth/* call
+*2026-11-11 · `app/lib/api.ts` · correction to the M2 plan*
+
+**Decision.** The app sends `credentials: 'include'` on every `/auth/*`
+request, not only on `/auth/refresh`.
+
+**Reason.** The plan said "only on refresh", but the web app (`:8081`) and
+the API (`:8000`) are different origins, and a browser **ignores**
+`Set-Cookie` on a cross-origin fetch unless the request asked for
+credentials. Login, verify-email, totp/verify, recovery/verify and passkey
+login all set the cookie; logout clears it. The cookie's own
+`Path=/api/v1/auth/refresh` still keeps it from being *sent* anywhere else.
+
+## D-53 · Passkeys are the default sign-in once a browser has used one
+*2026-11-11 · SPEC 6.2 item 3*
+
+**Decision.** After the first sign-in on a WebAuthn-capable browser, the
+app offers a passkey once ("Not now" is remembered on the device). After
+this browser registers or uses a passkey, the sign-in screen shows
+"Sign in with a passkey" as the primary button.
+
+**Reason.** The API can't say whether an email has a passkey before
+sign-in without leaking that the account exists, so "default" is decided
+per browser.
+
+## D-54 · TOTP setup comes before the tabs
+*2026-11-11 · SPEC 6.2 item 2*
+
+**Decision.** A signed-in user without TOTP is sent to the setup screen
+before seeing the tabs; the API also enforces it with `require_totp`, which
+M3's import routes will use.
+
+**Reason.** Every V1 feature needs imported bank data, and bank data needs
+TOTP (SPEC 6.2), so the app would be empty without it. Sending the user to
+setup at once is clearer than letting them find out at the import screen.

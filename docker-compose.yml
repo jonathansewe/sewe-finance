@@ -26,6 +26,11 @@ services:
     environment:
       DATABASE_URL: postgresql+psycopg://sewe:sewe@db:5432/sewe
       ALLOWED_ORIGINS: http://localhost:8081
+      # Local defaults; see .env.example. Emails (and their codes) go to
+      # this container's log: docker compose logs api
+      EMAIL_PROVIDER: console
+      WEBAUTHN_RP_ID: localhost
+      WEBAUTHN_ORIGIN: http://localhost:8081
     ports:
       - "8000:8000"
     depends_on:

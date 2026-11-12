@@ -4,7 +4,7 @@ A personal-finance app that reads your bank statements, sorts every
 transaction with rules and AI, and answers questions about your money.
 Read-only: it never moves money.
 
-**Status:** milestone M1 (skeleton) of 9. See [`docs/SPEC.md`](docs/SPEC.md) for
+**Status:** milestone M2 (auth and security) of 9. See [`docs/SPEC.md`](docs/SPEC.md) for
 the full plan and [`LEARN.md`](LEARN.md) for a plain-English tour of the code.
 
 ```
@@ -38,7 +38,22 @@ Web app (second terminal):
 cd app && npm install && npm run web
 ```
 
-Open <http://localhost:8081>.
+Open <http://localhost:8081> in Chrome or Firefox (Safari refuses `Secure`
+cookies on `http://localhost`, so sign-in won't survive a reload there).
+
+### Signing up locally
+
+1. Create an account on the sign-up screen.
+2. The verification email isn't sent: the console sender prints it to the
+   API log. Find the 6-digit code with `docker compose logs api`.
+3. Turn on two-factor: scan the QR code with any authenticator app.
+   Save the recovery codes it shows; they appear once only.
+4. On the web you're offered a passkey. Chrome's DevTools → More tools →
+   WebAuthn can emulate one if your laptop has no fingerprint reader.
+
+Auth settings (secrets, email, passkeys, proxy) are listed in
+`.env.example`. The defaults work locally; production refuses to start
+with them (`api/app/config.py`).
 
 ## Tests
 
@@ -52,6 +67,13 @@ App:
 
 ```bash
 cd app && npm test
+```
+
+Exercises (reference solutions, as CI runs them):
+
+```bash
+cd api && SOLUTION=reference uv run pytest ../exercises/M2
+cd app && SOLUTION=reference npx jest --selectProjects exercises
 ```
 
 CI runs both, plus lint and type checks, on every push (`.github/workflows/ci.yml`).

@@ -40,7 +40,12 @@ jobs:
       - run: uv run ruff check .
       - run: uv run ruff format --check .
       - run: uv run mypy
-      - run: uv run pytest -q
+      # SPEC 11.1: at least 80% coverage on security/ and services/.
+      - run: uv run pytest -q --cov=app/security --cov=app/services --cov-fail-under=80
+      # Python exercises against their reference solutions (SPEC 12.2).
+      # Inside this job on purpose: branch protection requires these 4 job
+      # names, so no new job is added.
+      - run: SOLUTION=reference uv run pytest ../exercises/M2 -q -p no:cacheprovider
 
   api-image:
     name: API Docker image builds
