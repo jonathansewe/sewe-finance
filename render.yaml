@@ -1,0 +1,55 @@
+# Render Blueprint: the SEWE Finance API (D-55, docs/DEPLOY.md).
+# Render reads this file when you create the service with New → Blueprint.
+# Secrets are NOT in this file: `sync: false` values are typed into the
+# Render dashboard once, and `generateValue` is created by Render itself.
+services:
+  - type: web
+    name: sewe-finance-api
+    runtime: docker
+    plan: free            # Q17: free while only Jonathan uses it; Starter ($7) before sharing
+    region: virginia      # next to Neon's AWS us-east-1, so each DB query stays short
+    dockerfilePath: ./api/Dockerfile
+    dockerContext: ./api
+    # GET /api/v1/health answers 200 only if the database answers too.
+    healthCheckPath: /api/v1/health
+    # Deploy only after CI is green on main (not on every push).
+    autoDeployTrigger: checksPass
+    # Changes outside api/ (the web app, docs) don't redeploy the API.
+    buildFilter:
+      paths:
+        - api/**
+    envVars:
+      - key: APP_ENV
+        value: prod       # turns on the refuse-unsafe-settings check in config.py
+      # The Dockerfile serves on 8000; tell Render to route there.
+      - key: PORT
+        value: "8000"
+      - key: ALLOWED_ORIGINS
+        value: https://finance.jonathansewe.com
+      - key: WEBAUTHN_RP_ID
+        value: finance.jonathansewe.com
+      - key: WEBAUTHN_ORIGIN
+        value: https://finance.jonathansewe.com
+      - key: COOKIE_SECURE
+        value: "true"
+      - key: EMAIL_PROVIDER
+        value: resend
+      - key: EMAIL_FROM
+        value: SEWE Finance <finance@jonathansewe.com>
+      # D-36 / Q18: peers allowed to set the client IP via X-Forwarded-For.
+      # Render's proxy reaches the container from its private network and
+      # Render publishes no fixed range, so this is the private 10/8 block.
+      # Provisional: DEPLOY.md steps 10-11 test it before anyone else uses
+      # the app.
+      - key: FORWARDED_ALLOW_IPS
+        value: 10.0.0.0/8
+      # Random 256-bit value made by Render at creation; nobody types it.
+      - key: JWT_SECRET
+        generateValue: true
+      # Typed into the dashboard (docs/DEPLOY.md step 4):
+      - key: DATABASE_URL
+        sync: false       # Neon *direct* URL, postgresql+psycopg://...?sslmode=require
+      - key: DATA_ENCRYPTION_KEY
+        sync: false       # generate locally, keep a copy in a password manager
+      - key: RESEND_API_KEY
+        sync: false
